@@ -19,6 +19,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
+<!-- FingerprintJS CDN -->
+<script src="https://openfpcdn.io/fingerprintjs/v3"></script>
+
   <!-- Babel CDN for inline JSX processing -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
@@ -159,44 +162,6 @@ function LiquidBar({ fillPercentage, colorClass, votes }) {
     function App() {
 // 1. Start with an empty array
 const [candidates, setCandidates] = useState([]);
-
-// 2. Listen dynamically to whatever candidates exist in Firebase
-useEffect(() => {
-  const fp = getDeviceFingerprint();
-  setFingerprint(fp);
-
-  const candidatesRef = db.ref('candidates');
-  candidatesRef.on('value', (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      // Convert Firebase object map into an array for rendering
-      const candidateList = Object.keys(data).map((id) => ({
-        id: id,
-        name: data[id].name,
-        votes: data[id].votes || 0,
-        color: data[id].color || 'bg-[#E87A30]',
-        borderColor: data[id].borderColor || 'border-[#E87A30]/50'
-      }));
-      setCandidates(candidateList);
-    } else {
-      setCandidates([]);
-    }
-  });
-
-  const voteRef = db.ref(`hasVoted/${fp}`);
-  voteRef.on('value', (snapshot) => {
-    if (snapshot.exists()) {
-      setHasVoted(true);
-    } else {
-      setHasVoted(false);
-    }
-  });
-
-  return () => {
-    candidatesRef.off();
-    voteRef.off();
-  };
-}, []);
       // Lockout state
       const [hasVoted, setHasVoted] = useState(false);
       const [fingerprint, setFingerprint] = useState('');
@@ -211,15 +176,29 @@ useEffect(() => {
       // Initialize lockout status and device fingerprint
 useEffect(() => {
     // 1. Get browser fingerprint
-    const fp = getDeviceFingerprint();
-    setFingerprint(fp);
+    if (window.FingerprintJS) {
+      window.FingerprintJS.load()
+        .then(fp => fp.get())
+        .then(result => {
+          const fp = result.visitorId;
+          setFingerprint(fp);
+
+          // Check if this device fingerprint has already voted
+          const voteRef = db.ref('hasVoted/${fp}');
+          voteRef.on('value', (snapshot) => {
+            if (snapshot.exists()) {
+              setHasVoted(true);
+            }
+          });
+        });
+    }
 
     // 2. Listen to candidate vote totals in Realtime Database
     const candidatesRef = db.ref('candidates');
     candidatesRef.on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
-      const candidateList = Object.keys(data).map((id) => ({
+        const candidateList = Object.keys(data).map((id) => ({
           id: id,
           name: data[id].name || id,
           votes: data[id].votes || 0,
@@ -231,17 +210,9 @@ useEffect(() => {
         setCandidates([]);
       }
     });
-    // 3. Check if this device fingerprint has already voted
-    const voteRef = db.ref(`hasVoted/${fp}`);
-    voteRef.on('value', (snapshot) => {
-      if (snapshot.exists()) {
-        setHasVoted(true);
-      }
-    });
 
     return () => {
       candidatesRef.off();
-      voteRef.off();
     };
   }, []);
 
