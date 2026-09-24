@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Council Election</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & React DOM CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  
+  <!-- Framer Motion CDN -->
+  <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+
+  <!-- Firebase App & Database CDN -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+  <!-- Babel CDN for inline JSX processing -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* Custom scrollbar styling for candidate swiping on mobile */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    @keyframes wave {
+  0% { transform: translateX(0); }
+  50% { transform: translateX(-25%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-wave {
+  animation: wave 4s ease-in-out infinite alternate;
+}
+
+/* Floating bubble animations inside liquid */
+.bubble {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  bottom: -10px;
+  animation: floatUp 3s infinite ease-in;
+}
+
+.bubble-1 { width: 6px; height: 6px; left: 20%; animation-duration: 2.5s; animation-delay: 0.2s; }
+.bubble-2 { width: 10px; height: 10px; left: 55%; animation-duration: 3.8s; animation-delay: 0.8s; }
+.bubble-3 { width: 4px; height: 4px; left: 80%; animation-duration: 2.1s; animation-delay: 0.4s; }
+
+@keyframes floatUp {
+  0% { transform: translateY(0) scale(1); opacity: 0.6; }
+  100% { transform: translateY(-300px) scale(1.3); opacity: 0; }
+}
+  </style>
+</head>
+<body class="bg-[#1E110E] text-amber-50 min-h-screen font-sans antialiased selection:bg-amber-600 selection:text-white">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    const { motion, AnimatePresence } = window.Motion;
+
+      const firebaseConfig = {
+    apiKey: "AIzaSyD-ANcD06d8Loc8GMKCKNYIbUYTXBpswO8",
+    authDomain: "student-council-election-4106f.firebaseapp.com",
+    databaseURL: "https://student-council-election-4106f-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "student-council-election-4106f",
+    storageBucket: "student-council-election-4106f.firebasestorage.app",
+    messagingSenderId: "659327760675",
+    appId: "1:659327760675:web:4c4f2744f39ea424e83496",
+    measurementId: "G-ZWXL88TS8T"
+  };
+
+// Initialize Firebase
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.database();
+
+    // Helper: Simple Device Fingerprinting (Canvas Hash)
+    const getDeviceFingerprint = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const txt = 'StudentCouncilElection2026';
+        ctx.textBaseline = 'top';
+        ctx.font = "14px 'Arial'";
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = '#f60';
+        ctx.fillRect(125, 1, 62, 20);
+        ctx.fillStyle = '#069';
+        ctx.fillText(txt, 2, 15);
+        ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+        ctx.fillText(txt, 4, 17);
+        
+        const b64 = canvas.toDataURL();
+        let hash = 0;
+        const str = b64 + navigator.userAgent + screen.width + screen.height;
+        for (let i = 0; i < str.length; i++) {
+          const char = str.charCodeAt(i);
+          hash = (hash << 5) - hash + char;
+          hash |= 0;
+        }
+        return 'device_' + Math.abs(hash).toString(16);
+      } catch (e) {
+        return 'fallback_device_' + Math.random().toString(36).substring(2, 9);
+      }
+    };
+
+    // Liquid Wave Filling Bar Component
+function LiquidBar({ fillPercentage, colorClass, votes }) {
+  return (
+    <div className="relative flex-1 h-full bg-[#2B1814]/80 rounded-2xl border-2 border-[#4A2821] overflow-hidden flex items-end shadow-inner">
+      
+      {/* Liquid Wave Container */}
+      <motion.div
+        className={`w-full relative ${colorClass}`}
+        initial={{ height: '0%' }}
+        animate={{ height: `${fillPercentage}%` }}
+        transition={{ type: 'spring', stiffness: 50, damping: 14 }}
+      >
+        {/* Wave Surface */}
+        {fillPercentage > 0 && (
+          <div className="absolute -top-3 left-0 w-[200%] h-4 pointer-events-none opacity-80">
+            <svg viewBox="0 0 1200 120" preserveAspectRatio="none" className="w-full h-full animate-wave fill-current text-white/30">
+              <path d="M0,0 C150,90 350,-40 500,40 C650,120 900,-20 1200,40 L1200,120 L0,120 Z"></path>
+            </svg>
+          </div>
+        )}
+
+        {/* Floating Bubbles */}
+        <div className="bubble bubble-1"></div>
+        <div className="bubble bubble-2"></div>
+        <div className="bubble bubble-3"></div>
+      </motion.div>
+
+      {/* Votes & Label Overlay (Brings back the numbers!) */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none drop-shadow-md z-10">
+        <span className="text-2xl sm:text-4xl font-black text-slate-100">
+          {votes}
+        </span>
+        <span className="text-[10px] sm:text-xs font-bold text-slate-300 uppercase tracking-widest opacity-80">
+          {votes === 1 ? 'vote' : 'votes'}
+        </span>
+      </div>
+
+    </div>
+  );
+}
+
+    function App() {
+// 1. Start with an empty array
+const [candidates, setCandidates] = useState([]);
+
+// 2. Listen dynamically to whatever candidates exist in Firebase
+useEffect(() => {
+  const fp = getDeviceFingerprint();
+  setFingerprint(fp);
+
+  const candidatesRef = db.ref('candidates');
+  candidatesRef.on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      // Convert Firebase object map into an array for rendering
+      const candidateList = Object.keys(data).map((id) => ({
+        id: id,
+        name: data[id].name,
+        votes: data[id].votes || 0,
+        color: data[id].color || 'bg-[#E87A30]',
+        borderColor: data[id].borderColor || 'border-[#E87A30]/50'
+      }));
+      setCandidates(candidateList);
+    } else {
+      setCandidates([]);
+    }
+  });
+
+  const voteRef = db.ref(`hasVoted/${fp}`);
+  voteRef.on('value', (snapshot) => {
+    if (snapshot.exists()) {
+      setHasVoted(true);
+    } else {
+      setHasVoted(false);
+    }
+  });
+
+  return () => {
+    candidatesRef.off();
+    voteRef.off();
+  };
+}, []);
+      // Lockout state
+      const [hasVoted, setHasVoted] = useState(false);
+      const [fingerprint, setFingerprint] = useState('');
+
+      // Admin Modal state
+      const [isAdminOpen, setIsAdminOpen] = useState(false);
+      const [password, setPassword] = useState('');
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      const [newCandidateName, setNewCandidateName] = useState('');
+      const [selectedColor, setSelectedColor] = useState('bg-blue-500');
+
+      // Initialize lockout status and device fingerprint
+useEffect(() => {
+    // 1. Get browser fingerprint
+    const fp = getDeviceFingerprint();
+    setFingerprint(fp);
+
+    // 2. Listen to candidate vote totals in Realtime Database
+    const candidatesRef = db.ref('candidates');
+    candidatesRef.on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+      const candidateList = Object.keys(data).map((id) => ({
+          id: id,
+          name: data[id].name || id,
+          votes: data[id].votes || 0,
+          color: data[id].color || 'bg-[#E87A30]',
+          borderColor: data[id].borderColor || 'border-[#E87A30]/50'
+        }));
+        setCandidates(candidateList);
+      } else {
+        setCandidates([]);
+      }
+    });
+    // 3. Check if this device fingerprint has already voted
+    const voteRef = db.ref(`hasVoted/${fp}`);
+    voteRef.on('value', (snapshot) => {
+      if (snapshot.exists()) {
+        setHasVoted(true);
+      }
+    });
+
+    return () => {
+      candidatesRef.off();
+      voteRef.off();
+    };
+  }, []);
+
+      // Handle voting action
+const handleVote = (candidateId) => {
+    if (hasVoted || !fingerprint) return;
+
+    // Increment candidate vote count atomically in Firebase
+    const candidateRef = db.ref(`candidates/${candidateId}/votes`);
+    candidateRef.transaction((currentVotes) => (currentVotes || 0) + 1);
+
+    // Save vote record under device fingerprint to lock local voting
+    db.ref(`hasVoted/${fingerprint}`).set(true);
+    setHasVoted(true);
+  };
+
+      // Calculate max votes for scale height calculations
+      const maxVotes = Math.max(...candidates.map((c) => c.votes), 10);
+
+      // Admin Login Check
+      const handleAdminLogin = (e) => {
+        e.preventDefault();
+        if (password === 'admin') {
+          setIsAuthenticated(true);
+        } else {
+          alert('Incorrect password. Default password is: admin');
+        }
+      };
+
+// Admin: Add candidate column to Firebase
+  const handleAddCandidate = () => {
+    if (!newCandidateName.trim()) return;
+
+    const candidateId = 'cand_' + Date.now();
+    const newCand = {
+      id: candidateId,
+      name: newCandidateName.trim(),
+      votes: 0,
+      color: selectedColor || 'bg-[#E87A30]',
+      borderColor: 'border-[#E87A30]/50'
+    };
+
+    db.ref(`candidates/${candidateId}`).set(newCand)
+      .then(() => {
+        setNewCandidateName('');
+      })
+      .catch((err) => {
+        console.error("Error adding candidate to Firebase:", err);
+      });
+  };
+
+  // Admin: Remove candidate column from Firebase
+  const handleRemoveCandidate = (id) => {
+    if (candidates.length <= 1) {
+      alert('You must have at least one candidate column.');
+      return;
+    }
+
+    db.ref(`candidates/${id}`).remove()
+      .catch((err) => {
+        console.error("Error removing candidate from Firebase:", err);
+      });
+  };
+
+      // Admin: Reset lock for testing
+      const handleResetDeviceLock = () => {
+          const currentFingerprint = typeof fingerprint !== 'undefined' ? fingerprint : (typeof deviceFingerprint !== 'undefined' ? deviceFingerprint : '');
+  localStorage.removeItem('sc_vote_cast_' + currentFingerprint);
+        setHasVoted(false);
+        alert('Device vote status reset! You can vote again for testing.');
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col justify-between p-4 sm:p-8 max-w-7xl mx-auto relative overflow-hidden">
+          
+          {/* Header & Admin Button */}
+          <header className="relative flex justify-between items-center pb-6 border-b border-[#4A2821] mb-6 pl-12 sm:pl-14">
+          <img 
+            src="progresslo.png" 
+            alt="Progress School" 
+            className="absolute -left-6 top-1/2 -translate-y-2/3 h-20 sm:h-24 w-auto object-contain drop-shadow-lg"
+          />
+          <div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-amber-100">
+                Student Council Election
+              </h1>
+              <p className="text-amber-400 text-xs sm:text-sm mt-1">
+                Tap the tick below your candidate to cast your vote
+              </p>
+            </div>
+
+            <button
+              onClick={() => setIsAdminOpen(true)}
+              className="bg-[#2B1814] hover:bg-[#3D2212D] text-amber-100 border border-[#4A2821] px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center gap-2"
+            >
+              <span>⚙️</span>
+              <span>Admin</span>
+            </button>
+          </header>
+
+          {/* Main Candidates View: Side-by-Side on Desktop/Tablet, Horizontal Swipe on Mobile */}
+          <main className="flex-1 flex items-end justify-center my-auto py-4 overflow-x-auto no-scrollbar w-full">
+            <div className="flex items-end justify-center gap-6 sm:gap-12 min-w-full sm:min-w-0 px-4">
+              
+              {candidates.map((candidate) => {
+                const fillPercentage = Math.min((candidate.votes / maxVotes) * 100, 100);
+
+                return (
+                  <div 
+                    key={candidate.id} 
+                    className="flex flex-col items-center h-[460px] sm:h-[520px] justify-end min-w-[160px] sm:min-w-[220px] flex-1 max-w-[280px]"
+                  >
+                    
+                    {/* Candidate Name Box at Top */}
+                    <div className="w-full text-center text-lg sm:text-2xl font-bold mb-4 tracking-wide text-amber-100 border-2 border-[#4A2821] px-4 py-2 sm:py-3 rounded-2xl bg-[#2B1814]90 shadow-xl truncate">
+                      {candidate.name}
+                    </div>
+
+                    {/* Bar & Left Scale Container */}
+                    <div className="flex items-end gap-2 sm:gap-4 w-full h-full justify-center">
+                      
+                      {/* Y-Axis Numeric Scale Indicator (Left Side) */}
+                      <div className="flex flex-col justify-between h-full py-2 text-[10px] sm:text-xs font-mono text-slate-500 font-bold select-none">
+                        <span>{maxVotes}</span>
+                        <span>{Math.round(maxVotes * 0.75)}</span>
+                        <span>{Math.round(maxVotes * 0.5)}</span>
+                        <span>{Math.round(maxVotes * 0.25)}</span>
+                        <span>0</span>
+                      </div>
+
+{/* Liquid Wave Filling Container */}
+<LiquidBar 
+  fillPercentage={fillPercentage} 
+  colorClass={candidate.color} 
+  votes={candidate.votes} 
+/>
+</div> 
+
+                    {/* Tick / Vote Action Button at Bottom */}
+                    <button
+                      onClick={() => handleVote(candidate.id)}
+                      disabled={hasVoted}
+                      className={`mt-4 sm:mt-6 w-full py-3 sm:py-4 rounded-2xl border-2 flex items-center justify-center transition-all duration-200 shadow-lg ${
+                        hasVoted
+                          ? 'bg-[#1E110E]/60 border-[#2B1814] text-amber-200/30 cursor-not-allowed opacity-50'
+                          : 'bg-[#2B1814] hover:bg-[#3D221D] border-[#4A2821] hover:border-[#E87A30]/50 active:scale-95 group'
+                      }`}
+                      title={hasVoted ? 'You have already voted' : `Vote for ${candidate.name}`}
+                    >
+                      <div
+                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl border-2 flex items-center justify-center transition-all ${
+                          hasVoted
+                            ? 'border-[#4A2821] bg-[#1E110E]'
+                            : 'border-[#4A2821] group-hover:border-[#E87A30] group-hover:bg-[#E87A30]/20'
+                        }`}
+                      >
+                        <span
+                          className={`text-base sm:text-lg font-black ${
+                            hasVoted ? 'text-amber-200/30' : 'opacity-0 group-hover:opacity-100 text-[#E87A30]'
+                          }`}
+                        >
+                          ✓
+                        </span>
+                      </div>
+                    </button>
+
+                  </div>
+                );
+              })}
+
+            </div>
+          </main>
+
+          {/* Lockout Notice Banner */}
+          {hasVoted && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-center py-3 px-4 rounded-2xl max-w-md mx-auto text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-lg"
+            >
+              <span>✓</span>
+              <span>Your vote has been submitted! Repeated votes are disabled on this device.</span>
+            </motion.div>
+          )}
+
+          {/* Admin Modal */}
+          <AnimatePresence>
+            {isAdminOpen && (
+              <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl"
+                >
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-black text-slate-100">Admin Control Panel</h2>
+                    <button
+                      onClick={() => {
+                        setIsAdminOpen(false);
+                        setIsAuthenticated(false);
+                      }}
+                      className="text-slate-400 hover:text-slate-200 text-lg p-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {!isAuthenticated ? (
+                    <form onSubmit={handleAdminLogin} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
+                          Enter Password
+                        </label>
+                        <input
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Password (default: admin)"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-100 focus:outline-none focus:border-emerald-500 text-sm"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-3 rounded-xl transition text-sm"
+                      >
+                        Unlock Admin Access
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="space-y-6">
+                      
+                      {/* Add Candidate Form */}
+                      <div className="border-b border-slate-800 pb-4">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase mb-3">Add Candidate Column</h3>
+                        <div className="space-y-3">
+                          <input
+                            type="text"
+                            placeholder="Student Name"
+                            value={newCandidateName}
+                            onChange={(e) => setNewCandidateName(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+                          />
+                          
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-400">Color:</span>
+                            {['bg-blue-500', 'bg-purple-500', 'bg-rose-500', 'bg-cyan-400', 'bg-emerald-500', 'bg-amber-400'].map((col) => (
+                              <button
+                                key={col}
+                                type="button"
+                                onClick={() => setSelectedColor(col)}
+                                className={`w-6 h-6 rounded-full ${col} ${
+                                  selectedColor === col ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''
+                                }`}
+                              />
+                            ))}
+                          </div>
+
+                          <button
+                            onClick={handleAddCandidate}
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold py-2 rounded-xl text-sm transition border border-slate-700"
+                          >
+                            + Add Column
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Manage Existing Columns */}
+                      <div>
+                        <h3 className="text-xs font-bold text-slate-400 uppercase mb-3">Manage Candidates</h3>
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                          {candidates.map((c) => (
+                            <div
+                              key={c.id}
+                              className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className={`w-3 h-3 rounded-full ${c.color}`}></span>
+                                <span className="font-semibold text-sm text-slate-200">{c.name}</span>
+                                <span className="text-xs text-slate-500">({c.votes} votes)</span>
+                              </div>
+                              <button
+                                onClick={() => handleRemoveCandidate(c.id)}
+                                className="text-rose-400 hover:text-rose-300 text-xs font-semibold"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Testing Utilities */}
+                      <div className="pt-2 border-t border-slate-800">
+                        <button
+                          onClick={handleResetDeviceLock}
+                          className="w-full bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs py-2 rounded-xl transition border border-slate-800"
+                        >
+                          Reset Vote Lockout for Testing
+                        </button>
+                      </div>
+
+                    </div>
+                  )}
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
