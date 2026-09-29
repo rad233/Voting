@@ -20,7 +20,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
 <!-- FingerprintJS -->
- <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
+ <script src="https://openfpcdn.io/fingerprintjs/v3/umd.min.js"></script>
 
   <!-- Babel CDN for inline JSX processing -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -178,15 +178,21 @@ const [candidates, setCandidates] = useState([]);
     // 1. Generate real hardware fingerprint
     const initFingerprint = async () => {
       try {
+let localToken = localStorage.getItem('voter_unique_token');
+        if (!localToken) {
+          localToken = 'v_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+          localStorage.setItem('voter_unique_token', localToken);
+        }
+
         const fpPromise = window.FingerprintJS.load();
         const fp = await fpPromise;
         const result = await fp.get();
-        const visitorId = result.visitorId; // Unique persistent ID across browsers
-        
-        setFingerprint(visitorId);
+        const visitorId = result.visitorId;
+        const combinedKey = `${visitorId}_${localToken}`;
+        setFingerprint(combinedKey);
 
         // 2. Check Firebase if this persistent visitorId has already voted
-        const voteRef = db.ref(`hasVoted/${visitorId}`);
+        const voteRef = db.ref(`hasVoted/${combinedKey}`);
         voteRef.on('value', (snapshot) => {
           if (snapshot.exists()) {
             setHasVoted(true);
