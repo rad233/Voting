@@ -159,6 +159,34 @@ function LiquidBar({ fillPercentage, colorClass, votes }) {
   );
 }
 
+const checkIsIncognito = async () => {
+  try {
+    // 1. Test Safari OPFS (Fails specifically in Safari Private Browsing)
+    if (navigator.storage && navigator.storage.getDirectory) {
+      try {
+        await navigator.storage.getDirectory();
+      } catch (e) {
+        // Safari Private Mode throws an error here
+        return true; 
+      }
+    }
+
+    // 2. Safe LocalStorage Availability Test
+    const testKey = '__incognito_test__';
+    try {
+      localStorage.setItem(testKey, testKey);
+      localStorage.removeItem(testKey);
+    } catch (e) {
+      // If local storage writes are completely blocked/restricted by the browser
+      return true;
+    }
+
+    return false;
+  } catch (e) {
+    return false;
+  }
+};
+
     function App() {
 // 1. Start with an empty array
 const [candidates, setCandidates] = useState([]);
@@ -178,6 +206,12 @@ const [candidates, setCandidates] = useState([]);
     // 1. Generate real hardware fingerprint
     const initFingerprint = async () => {
       try {
+        const isPrivate = await checkIsIncognito();
+        if (isPrivate) {
+          alert("incognito / Private Browsing is not allowed for voting. Please switch to a regular browser tab.");
+          setHasVoted(true);
+          return;
+        }
 let localToken = localStorage.getItem('voter_unique_token');
         if (!localToken) {
           localToken = 'v_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
